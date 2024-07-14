@@ -1,10 +1,12 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
+use XML::Writer;
+use IO::File;
 
 # Input and output files
 my $input_file = 'C:/Users/Vipul Potdar/Desktop/Toppan Photomask Task/orderform.txt';
-my $output_file = 'C:/Users/Vipul Potdar/Desktop/Toppan Photomask Task/generated_output_Perl.xml';
+my $output_file = 'C:/Users/Vipul Potdar/Desktop/Toppan Photomask Task/generated_output.xml';
 
 # Open the input file
 open(my $in, '<', $input_file) or die "Cannot open $input_file: $!";
@@ -13,15 +15,16 @@ open(my $in, '<', $input_file) or die "Cannot open $input_file: $!";
 my @lines = <$in>;
 close($in);
 
-# Open the output file
-open(my $out, '>', $output_file) or die "Cannot open $output_file: $!";
+# Create a new XML writer
+my $output = IO::File->new(">$output_file");
+my $writer = XML::Writer->new(OUTPUT => $output, DATA_MODE => 1, DATA_INDENT => 2);
 
-# Print XML header
-print $out "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-print $out "<OrderForm>\n";
+# Print XML header and root element
+$writer->xmlDecl("UTF-8");
+$writer->startTag("OrderForm");
 
 # Variables to store data
-my $customer_name = "!CUSTOMER_NAME__!!";  # Initialize with default value Customer Name 
+my $customer_name = "!CUSTOMER_NAME__!!";
 my $mask_supplier = "";
 my $date = "";
 my $site_of = "";
@@ -33,6 +36,7 @@ my $status = "";
 my $mask_set_name = "";
 my $fab_unit = "";         
 my $email_address = "";
+my $device = "";           
 my @levels = ();
 my @cdinfo = ();
 my $po_numbers = "";
@@ -54,7 +58,7 @@ foreach my $line (@lines) {
         $mask_supplier = $1;
     }
     if ($line =~ /DATE : (\d{2})\/(\d{2})\/(\d{4})/) {
-        $date = "$3-$1-$2"; # Convert date format to YYYY-MM-DD
+        $date = "$3-$1-$2"; 
     }
     if ($line =~ /SITE OF : (\w+)/) {
         $site_of = $1;
@@ -68,17 +72,22 @@ foreach my $line (@lines) {
     if ($line =~ /PAGE : (\d+)/) {
         $page = $1;
     }
+    if ($line =~ /DEVICE\s*:\s*(.+?)\s*\|/) {
+        $device = $1;
+        $device =~ s/\s+$//;  
+    }
     if ($line =~ /TECHNOLOGY NAME : (.+?)\s+STATUS\s*:/) {
         $technology_name = $1;
     }
-    if ($line =~ /STATUS\s*:\s*(\S+)/) {
+    if ($line =~ /STATUS\s*:\s*(N0)/) {
         $status = $1;
     }
     if ($line =~ /MASK SET NAME : (\w+)/) {
         $mask_set_name = $1;
     }
-    if ($line =~ /FAB UNIT : (\w+)/) {
+    if ($line =~ /FAB UNIT\s*:\s*(.+?)\s+EMAIL\s*:/s) {
         $fab_unit = $1;
+        $fab_unit =~ s/\s+$//;  
     }
     if ($line =~ /EMAIL : (\S+)/) {
         $email_address = $1;
@@ -86,17 +95,22 @@ foreach my $line (@lines) {
     if ($line =~ /LEVEL\s+MASK CODIFICATION\s+GRP\s+CYCL\s+QTY\s+SHIP DATE/) {
         next; # Skip the header line
     }
-    if ($line =~ /(\d+)\s*\|(.+?)\|\s*(\d+)\s*\|\s*(\w+)\s*\|\s*(\d+)\s*\|\s*(\d{2})([A-Z]{3})(\d{2})/) {
+    if ($line =~ /(\d+)\s*\|\s*(.+?)\s*\|\s*(\d+)\s*\|\s*(\w+)\s*\|\s*(\d+)\s*\|\s*(\d{2})([A-Z]{3})(\d{2})/) {
+        my $num = $1;
+        my $mask_codification = $2 =~ s/\s+$//r; 
+        my $group = $3;
+        my $cycle = $4;
+        my $quantity = $5;
         my $day = $6;
         my $month = $months{$7};
         my $year = "20$8";
         my $ship_date = "$year-$month-$day";
         my %level = (
-            num => $1,
-            mask_codification => $2 =~ s/\s+$//r, # Remove trailing spaces
-            group => $3,
-            cycle => $4,
-            quantity => $5,
+            num => $num,
+            mask_codification => $mask_codification,
+            group => $group,
+            cycle => $cycle,
+            quantity => $quantity,
             ship_date => $ship_date,
         );
         push @levels, \%level;
@@ -107,8 +121,8 @@ foreach my $line (@lines) {
     if ($line =~ /SITE TO SEND MASKS TO : (\w+)/) {
         $site_to_send_masks_to = $1;
     }
-    if ($line =~ /SITE TO SEND INVOICE TO : (.+)/) {
-        ($site_to_send_invoice_to) = $line =~ /SITE TO SEND INVOICE TO : (\w+ SITE)/;
+    if ($line =~ /SITE TO SEND INVOICE TO : (\w+ SITE)/) {
+        $site_to_send_invoice_to = $1;
     }
     if ($line =~ /TECHNICAL CONTACT : (.+?)\s+/) {
         $technical_contact = $1;
@@ -126,55 +140,134 @@ foreach my $line (@lines) {
     }
 }
 
-# Print data in XML format
-print $out "  <Customer>", (defined $customer_name ? $customer_name : ''), "</Customer>\n";
-print $out "  <Device>AA\@BBBBB</Device>\n";
-print $out "  <MaskSupplier>", (defined $mask_supplier ? $mask_supplier : ''), "</MaskSupplier>\n";
-print $out "  <Date>", (defined $date ? $date : ''), "</Date>\n";
-print $out "  <SiteOf>", (defined $site_of ? $site_of : ''), "</SiteOf>\n";
-print $out "  <OrderFormNumber>", (defined $orderform_number ? $orderform_number : ''), "</OrderFormNumber>\n";
-print $out "  <Revision>", (defined $revision ? $revision : ''), "</Revision>\n";
-print $out "  <Page>", (defined $page ? $page : ''), "</Page>\n";
-print $out "  <TechnologyName>", (defined $technology_name ? $technology_name : ''), "</TechnologyName>\n";
-print $out "  <Status>", (defined $status ? $status : ''), "</Status>\n";
-print $out "  <MaskSetName>", (defined $mask_set_name ? $mask_set_name : ''), "</MaskSetName>\n";
-print $out "  <FabUnit>", (defined $fab_unit ? $fab_unit : ''), "</FabUnit>\n";
-print $out "  <EmailAddress>", (defined $email_address ? $email_address : ''), "</EmailAddress>\n";
-print $out "  <Levels>\n";
+# Write XML content using XML::Writer
+$writer->startTag("Customer");
+$writer->characters($customer_name);
+$writer->endTag("Customer");
+
+$writer->startTag("Device");
+$writer->characters($device);
+$writer->endTag("Device");
+
+$writer->startTag("MaskSupplier");
+$writer->characters($mask_supplier);
+$writer->endTag("MaskSupplier");
+
+$writer->startTag("Date");
+$writer->characters($date);
+$writer->endTag("Date");
+
+$writer->startTag("SiteOf");
+$writer->characters($site_of);
+$writer->endTag("SiteOf");
+
+$writer->startTag("OrderFormNumber");
+$writer->characters($orderform_number);
+$writer->endTag("OrderFormNumber");
+
+$writer->startTag("Revision");
+$writer->characters($revision);
+$writer->endTag("Revision");
+
+$writer->startTag("Page");
+$writer->characters($page);
+$writer->endTag("Page");
+
+$writer->startTag("TechnologyName");
+$writer->characters($technology_name);
+$writer->endTag("TechnologyName");
+
+$writer->startTag("Status");
+$writer->characters($status);
+$writer->endTag("Status");
+
+$writer->startTag("MaskSetName");
+$writer->characters($mask_set_name);
+$writer->endTag("MaskSetName");
+
+$writer->startTag("FabUnit");
+$writer->characters($fab_unit);
+$writer->endTag("FabUnit");
+
+$writer->startTag("EmailAddress");
+$writer->characters($email_address);
+$writer->endTag("EmailAddress");
+
+$writer->startTag("Levels");
 foreach my $level (@levels) {
-    print $out "    <Level num=\"$level->{num}\">\n";
-    print $out "      <MaskCodification>", (defined $level->{mask_codification} ? $level->{mask_codification} : ''), "</MaskCodification>\n";
-    print $out "      <Group>", (defined $level->{group} ? $level->{group} : ''), "</Group>\n";
-    print $out "      <Cycle>", (defined $level->{cycle} ? $level->{cycle} : ''), "</Cycle>\n";
-    print $out "      <Quantity>", (defined $level->{quantity} ? $level->{quantity} : ''), "</Quantity>\n";
-    print $out "      <ShipDate>", (defined $level->{ship_date} ? $level->{ship_date} : ''), "</ShipDate>\n";
-    print $out "    </Level>\n";
+    $writer->startTag("Level", "num" => $level->{num});
+    $writer->startTag("MaskCodification");
+    $writer->characters($level->{mask_codification});
+    $writer->endTag("MaskCodification");
+    $writer->startTag("Group");
+    $writer->characters($level->{group});
+    $writer->endTag("Group");
+    $writer->startTag("Cycle");
+    $writer->characters($level->{cycle});
+    $writer->endTag("Cycle");
+    $writer->startTag("Quantity");
+    $writer->characters($level->{quantity});
+    $writer->endTag("Quantity");
+    $writer->startTag("ShipDate");
+    $writer->characters($level->{ship_date});
+    $writer->endTag("ShipDate");
+    $writer->endTag("Level");
 }
-print $out "  </Levels>\n";
+$writer->endTag("Levels");
 
-print $out "  <Cdinformation>\n";
+$writer->startTag("Cdinformation");
 foreach my $cd (@cdinfo) {
-    print $out "    <Level>\n";
-    print $out "      <Revision>", (defined $cd->{revision} ? $cd->{revision} : ''), "</Revision>\n";
-    print $out "      <CDNumber>", (defined $cd->{cd_number} ? $cd->{cd_number} : ''), "</CDNumber>\n";
-    print $out "      <CDName>", (defined $cd->{cd_name} ? $cd->{cd_name} : ''), "</CDName>\n";
-    print $out "      <Feature>", (defined $cd->{feature} ? $cd->{feature} : ''), "</Feature>\n";
-    print $out "      <Tone>", (defined $cd->{tone} ? $cd->{tone} : ''), "</Tone>\n";
-    print $out "      <Polarity>", (defined $cd->{polarity} ? $cd->{polarity} : ''), "</Polarity>\n";
-    print $out "    </Level>\n";
+    $writer->startTag("Level");
+    $writer->startTag("Revision");
+    $writer->characters($cd->{revision});
+    $writer->endTag("Revision");
+    $writer->startTag("CDNumber");
+    $writer->characters($cd->{cd_number});
+    $writer->endTag("CDNumber");
+    $writer->startTag("CDName");
+    $writer->characters($cd->{cd_name});
+    $writer->endTag("CDName");
+    $writer->startTag("Feature");
+    $writer->characters($cd->{feature});
+    $writer->endTag("Feature");
+    $writer->startTag("Tone");
+    $writer->characters($cd->{tone});
+    $writer->endTag("Tone");
+    $writer->startTag("Polarity");
+    $writer->characters($cd->{polarity});
+    $writer->endTag("Polarity");
+    $writer->endTag("Level");
 }
-print $out "  </Cdinformation>\n";
+$writer->endTag("Cdinformation");
 
-print $out "  <PONumbers>", (defined $po_numbers ? $po_numbers : ''), "</PONumbers>\n";
-print $out "  <SiteToSendMasksTo>", (defined $site_to_send_masks_to ? $site_to_send_masks_to : ''), "</SiteToSendMasksTo>\n";
-print $out "  <SiteToSendInvoiceTo>", (defined $site_to_send_invoice_to ? $site_to_send_invoice_to : ''), "</SiteToSendInvoiceTo>\n";
-print $out "  <TechnicalContact>", (defined $technical_contact ? $technical_contact : ''), "</TechnicalContact>\n";
-print $out "  <ShippingMethod></ShippingMethod>\n";
-print $out "  <AdditionalInformation></AdditionalInformation>\n";
-print $out "</OrderForm>\n";
+$writer->startTag("PONumbers");
+$writer->characters($po_numbers);
+$writer->endTag("PONumbers");
 
-# Close the file handles
-close($in);
-close($out);
+$writer->startTag("SiteToSendMasksTo");
+$writer->characters($site_to_send_masks_to);
+$writer->endTag("SiteToSendMasksTo");
+
+$writer->startTag("SiteToSendInvoiceTo");
+$writer->characters($site_to_send_invoice_to);
+$writer->endTag("SiteToSendInvoiceTo");
+
+$writer->startTag("TechnicalContact");
+$writer->characters($technical_contact);
+$writer->endTag("TechnicalContact");
+
+$writer->startTag("ShippingMethod");
+$writer->characters("");
+$writer->endTag("ShippingMethod");
+
+$writer->startTag("AdditionalInformation");
+$writer->characters("");
+$writer->endTag("AdditionalInformation");
+
+$writer->endTag("OrderForm");
+
+# Close the writer
+$writer->end();
+$output->close();
 
 print "XML file generated successfully as $output_file.\n";
